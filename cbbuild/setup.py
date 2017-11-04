@@ -4,7 +4,7 @@ import os
 
 from setuptools import setup
 
-import cbbuild.version
+import version
 
 
 # Let's add this later
@@ -66,7 +66,7 @@ DEPENDENCY_LINKS = load_github_dependency_links('requirements.txt')
 
 setup_args = dict(
     name='cbbuild',
-    version=cbbuild.version.__version__,
+    version=version.__version__,
     description='Couchbase Build Team support Python packages',
     # long_description = long_description,
     author='Couchbase Build and Release Team',
