@@ -55,9 +55,8 @@ def load_github_dependency_links(fname):
     dep_links = list()
 
     for req in reqfile_read(fname):
-        if 'git+' in req and 'github' in req:  # not exactly precise...
-            url, ref_egg = req.split('git+', 1)[-1].rsplit('@', 1)
-            dep_links.append(url + '/tarball/' + ref_egg)
+        if 'git+' in req and 'github' in req:  # Not exactly precise...
+            dep_links.append(req)
 
     return dep_links
 
@@ -76,7 +75,7 @@ setup_args = dict(
     install_requires=REQUIREMENTS['install'],
     dependency_links=DEPENDENCY_LINKS,
     classifiers=[
-        'Development Status :: 5 - Production/Stable',
+        'Development Status :: 3 - Alpha',
         'Environment :: Console',
         'Intended Audience :: Developers',
         'License :: OSI Approved',
