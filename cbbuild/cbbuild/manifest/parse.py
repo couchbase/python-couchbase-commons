@@ -259,11 +259,14 @@ class Manifest:
         format
         """
 
-        if self.is_bytes:
-            self.data = etree.XML(self.manifest)
-        else:
-            with open(self.manifest) as fh:
-                self.data = etree.XML(fh.read().encode())
+        try:
+            if self.is_bytes:
+                self.data = etree.XML(self.manifest)
+            else:
+                with open(self.manifest) as fh:
+                    self.data = etree.XML(fh.read().encode())
+        except etree.XMLSyntaxError:
+            raise InvalidManifest('Not an XML file')
 
         self.tree = etree.ElementTree(self.data)
 
