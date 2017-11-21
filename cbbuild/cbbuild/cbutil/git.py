@@ -15,6 +15,46 @@ from dulwich.porcelain import clone, remote_add
 from dulwich.repo import Repo
 
 
+default_bytes_err_stream = getattr(sys.stderr, 'buffer', sys.stderr)
+
+
+def fetch(repo, remote_location, errstream=default_bytes_err_stream):
+    """
+    Modified form of dulwich's porcelain.fetch method which
+    fetches from all remotes
+    """
+
+    client, path = get_transport_and_path(remote_location)
+    remote_refs = client.fetch(
+        path, repo,
+        determine_wants=repo.object_store.determine_wants_all,
+        progress=errstream.write
+    )
+
+    return remote_refs
+
+
+def checkout_repo(path, url, bare=True):
+    """
+    Either clones a new Git repo from URL into path (if it didn't already
+    exist), or else fetches new content from URL into repo at path (if it
+    did already exist). Returns a Dulwich Repo object on path.
+    """
+
+    abspath = pathlib.Path(path).resolve()
+    cfgpath = abspath / ('config' if bare else '.git/config')
+    abspath = str(abspath)
+
+    if cfgpath.exists():
+        print(f'Fetching {url} into {path}')
+        fetch(Repo(abspath), url)
+    else:
+        print(f'Cloning {url} into {path}')
+        clone(url, target=abspath, bare=bare)
+
+    return Repo(abspath)
+
+
 class MissingCommitError(Exception):
     """Module-level exception for missing/invalid commits"""
 
@@ -46,7 +86,6 @@ class RepoCache:
     and keep the process moving as quickly as possible
     """
 
-    default_bytes_err_stream = getattr(sys.stderr, 'buffer', sys.stderr)
     RemoteEntry = namedtuple('RemoteEntry', ['name', 'url'])
 
     def __init__(self):
@@ -67,22 +106,6 @@ class RepoCache:
                 ))
 
         return remotes
-
-    @staticmethod
-    def fetch(repo, remote_location, errstream=default_bytes_err_stream):
-        """
-        Modified form of dulwich's porcelain.fetch method which
-        fetches from all remotes
-        """
-
-        client, path = get_transport_and_path(remote_location)
-        remote_refs = client.fetch(
-            path, repo,
-            determine_wants=repo.object_store.determine_wants_all,
-            progress=errstream.write
-        )
-
-        return remote_refs
 
     def get_repo(self, project, repo_dir, remote, repo_url=None):
         """
@@ -131,7 +154,7 @@ class RepoCache:
 
                 if remote not in remotes:
                     repo_entry.add_remote(self.RemoteEntry(remote, repo_url))
-                    self.fetch(repo, repo_url)
+                    fetch(repo, repo_url)
             else:
                 # Repository needs to be added to cache, ensure URL
                 # has been given, then create cache entry, update
@@ -153,7 +176,7 @@ class RepoCache:
                     )
                     remote_add(repo_dir, remote, repo_url)
 
-                self.fetch(repo, repo_url)
+                fetch(repo, repo_url)
         else:
             # Repository has not been checked out yet, therefore
             # there will be no cache entry, so ensure URL is given,
