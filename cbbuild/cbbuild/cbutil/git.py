@@ -3,8 +3,10 @@ Collection of methods for using Git via Dulwich, primarily designed
 for use with the build database
 """
 
+import logging
+import os
 import pathlib
-import sys
+import subprocess
 
 from collections import namedtuple
 
@@ -15,13 +17,19 @@ from dulwich.porcelain import clone, remote_add
 from dulwich.repo import Repo
 
 
-default_bytes_err_stream = getattr(sys.stderr, 'buffer', sys.stderr)
+logger = logging.getLogger('cbbuild.git')
+devnull_fh = open(os.devnull, 'w')
+# default_bytes_err_stream = getattr(sys.stderr, 'buffer', sys.stderr)
+default_bytes_err_stream = devnull_fh
 
 
-def fetch(repo, remote_location, errstream=default_bytes_err_stream):
+def broken_fetch(repo, remote_location, errstream=default_bytes_err_stream):
     """
     Modified form of dulwich's porcelain.fetch method which
     fetches from all remotes
+
+    NOTE: This method is BROKEN in that is does NOT update the remotes
+    in a local checkout (bare or not).
     """
 
     client, path = get_transport_and_path(remote_location)
@@ -32,6 +40,18 @@ def fetch(repo, remote_location, errstream=default_bytes_err_stream):
     )
 
     return remote_refs
+
+
+def fetch(repo, remote_location):
+    """
+    Call out to Git command to do a 'fetch --all'
+
+    This is a (hopefully) temporary method until Dulwich's porcelain.fetch()
+    actually does what is intended
+    """
+
+    subprocess.run(['git', 'fetch', '--all'], cwd=repo.path,
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
 def checkout_repo(path, url, bare=True):
@@ -46,11 +66,12 @@ def checkout_repo(path, url, bare=True):
     abspath = str(abspath)
 
     if cfgpath.exists():
-        print(f'Fetching {url} into {path}')
+        logger.debug(f'Fetching {url} into {path}...')
         fetch(Repo(abspath), url)
     else:
-        print(f'Cloning {url} into {path}')
-        clone(url, target=abspath, bare=bare)
+        logger.debug(f'Cloning {url} into {path}...')
+        clone(url, target=abspath, bare=bare,
+              errstream=default_bytes_err_stream)
 
     return Repo(abspath)
 
@@ -129,10 +150,13 @@ class RepoCache:
         fetch for the repository).
         """
 
+        logger.debug(f'Retrieving or adding repo {project} to cache...')
         repo_dir = str(repo_dir.resolve())
         repo_exists = pathlib.Path(pathlib.Path(repo_dir) / 'config').exists()
 
         if repo_exists:
+            logger.debug(f'    Repo {project} already exists, updating '
+                         f'the cache...')
             # Repository is already checked out, so initialize connection
             # and update cache based on current cache information
             repo = Repo(repo_dir)
@@ -153,6 +177,8 @@ class RepoCache:
                 remotes = [remote.name for remote in repo_entry.remotes]
 
                 if remote not in remotes:
+                    logger.debug(f'    Adding remote {remote} for repo '
+                                 f'{project} and fetching remote...')
                     repo_entry.add_remote(self.RemoteEntry(remote, repo_url))
                     fetch(repo, repo_url)
             else:
@@ -171,13 +197,18 @@ class RepoCache:
                 )
 
                 if remote not in remote_names:
+                    logger.debug(f'    Adding remote {remote} for repo '
+                                 f'{project}...')
                     self.cache[project].add_remote(
                         self.RemoteEntry(remote, repo_url)
                     )
                     remote_add(repo_dir, remote, repo_url)
 
+                logger.debug(f'    Fetching remotes for {project}...')
                 fetch(repo, repo_url)
         else:
+            logger.debug(f'    Repo {project} is new, cloning and adding '
+                         f'to the cache...')
             # Repository has not been checked out yet, therefore
             # there will be no cache entry, so ensure URL is given,
             # set up cache entry and clone the repo, setting the
@@ -193,6 +224,7 @@ class RepoCache:
 
             try:
                 repo = clone(repo_url, target=repo_dir, bare=True,
+                             errstream=default_bytes_err_stream,
                              origin=remote.encode('utf-8'))
             except dulwich.errors.HangupException:
                 raise RuntimeError(
