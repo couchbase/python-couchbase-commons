@@ -4,9 +4,9 @@ for use with the build database
 """
 
 import logging
-import os
 import pathlib
 import subprocess
+import sys
 
 from collections import namedtuple
 
@@ -18,9 +18,7 @@ from dulwich.repo import Repo
 
 
 logger = logging.getLogger('cbbuild.git')
-devnull_fh = open(os.devnull, 'w')
-# default_bytes_err_stream = getattr(sys.stderr, 'buffer', sys.stderr)
-default_bytes_err_stream = devnull_fh
+default_bytes_err_stream = getattr(sys.stderr, 'buffer', sys.stderr)
 
 
 def broken_fetch(repo, remote_location, errstream=default_bytes_err_stream):
