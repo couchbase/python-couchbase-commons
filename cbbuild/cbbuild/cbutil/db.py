@@ -12,6 +12,30 @@ class NotFoundError(Exception):
 
     pass
 
+class CouchbaseBuild:
+    """
+    Represents a Build entry in the build database
+    """
+
+    def __init__(self, db, product, version, bld_num):
+        """Loads build entry from database"""
+        self.__db = db
+        self.__key = f'{product}-{version}-{bld_num}'
+        self.__data = self.__db.get_document(self.__key)
+
+    def __getattr__(self, key):
+        """Passes through attribute requests to underlying data"""
+
+        return self.__data.get(key)
+
+    def set_metadata(self, key, value):
+        """
+        Assigns arbitrary metadata to a build. Returns the modified
+        build dictionary
+        """
+
+        self.__data.setdefault('metadata', {})[key] = value
+        self.__db.upsert_documents({self.__key: self.__data})
 
 class CouchbaseDB:
     """
@@ -27,6 +51,11 @@ class CouchbaseDB:
             db_info['db_uri'], username=db_info['username'],
             password=db_info['password']
         )
+
+    def get_build(self, product, version, bld_num):
+        """Get the CouchbaseBuild object for a specific build"""
+
+        return CouchbaseBuild(self, product, version, bld_num)
 
     def get_document(self, key):
         """Retrieve the document with the given key"""
