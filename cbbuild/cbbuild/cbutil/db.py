@@ -5,12 +5,15 @@ the Python API
 
 import couchbase.bucket
 import couchbase.exceptions
+
 from couchbase.n1ql import N1QLQuery
+
 
 class NotFoundError(Exception):
     """Module-level exception for missing keys in database"""
 
     pass
+
 
 class CouchbaseBuild:
     """
@@ -41,6 +44,7 @@ class CouchbaseBuild:
     @property
     def key(self):
         return self.__key
+
 
 class CouchbaseCommit:
     """
@@ -75,6 +79,7 @@ class CouchbaseCommit:
 
         return self.__key.split('-')[-1]
 
+
 class CouchbaseDB:
     """
     Manage connection and access to a Couchbase Server database,
@@ -108,7 +113,7 @@ class CouchbaseDB:
             **kwargs
         )
         return [
-            CouchbaseBuild(self, row["build_info"])
+            CouchbaseBuild(self, row['build_info'])
             for row in self.bucket.n1ql_query(query)
         ]
 
@@ -135,7 +140,7 @@ class CouchbaseDB:
             **kwargs
         )
         return [
-            CouchbaseCommit(self, row["build_info"])
+            CouchbaseCommit(self, row['build_info'])
             for row in self.bucket.n1ql_query(query)
         ]
 
@@ -157,6 +162,14 @@ class CouchbaseDB:
             return self.bucket.get('product-version-index').value
         except couchbase.exceptions.NotFoundError:
             return dict()
+
+    def iterate_documents(self, doctype):
+        """Iterate through all documents of a given type"""
+
+        query = N1QLQuery(f"SELECT * FROM build_info where type='{doctype}'")
+
+        for row in self.bucket.n1ql_query(query):
+            yield row['build_info']
 
     def upsert_documents(self, data):
         """Do bulk insert/update of a set of documents"""
