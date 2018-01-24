@@ -90,59 +90,11 @@ class CouchbaseDB:
     def __init__(self, db_info):
         """Set up connection to desired Couchbase Server bucket"""
 
+        self.bucket_name = db_info['db_uri'].split('/')[-1]
         self.bucket = couchbase.bucket.Bucket(
             db_info['db_uri'], username=db_info['username'],
             password=db_info['password']
         )
-
-    def get_build(self, product, version, bld_num):
-        """Get the CouchbaseBuild object for a specific build"""
-
-        data = self.get_document(f'{product}-{version}-{bld_num}')
-        return CouchbaseBuild(self, data)
-
-    def query_builds(self, where_clause, **kwargs):
-        """
-        Uses a N1QL query to return a list of CouchbaseBuild objects.
-        Pass everything *after* the WHERE. You may also pass additional
-        named parameters which will be associated with $variables in
-        the query string.
-        """
-        query = N1QLQuery(
-            f"SELECT * FROM build_info WHERE type='build' AND {where_clause}",
-            **kwargs
-        )
-        return [
-            CouchbaseBuild(self, row['build_info'])
-            for row in self.bucket.n1ql_query(query)
-        ]
-
-    def get_commit(self, project, sha):
-        """Get the CouchbaseCommit object for a specific commit"""
-
-        return self.get_commit(f'{project}-{sha}')
-
-    def get_commit(self, commit_key):
-        """Get the CouchbaseCommit object for a specific commit, by key"""
-
-        data = self.get_document(commit_key)
-        return CouchbaseCommit(self, data)
-
-    def query_commits(self, where_clause, **kwargs):
-        """
-        Uses a N1QL query to return a list of CouchbaseCommit objects.
-        Pass everything *after* the WHERE. You may also pass additional
-        named parameters which will be associated with $variables in
-        the query string.
-        """
-        query = N1QLQuery(
-            f"SELECT * FROM build_info WHERE type='commit' AND {where_clause}",
-            **kwargs
-        )
-        return [
-            CouchbaseCommit(self, row['build_info'])
-            for row in self.bucket.n1ql_query(query)
-        ]
 
     def get_document(self, key):
         """Retrieve the document with the given key"""
@@ -151,6 +103,61 @@ class CouchbaseDB:
             return self.bucket.get(key).value
         except couchbase.exceptions.NotFoundError:
             raise NotFoundError(f'Unable to find key "{key}" in database')
+
+    def get_build(self, product, version, bld_num):
+        """Get the CouchbaseBuild object for a specific build"""
+
+        data = self.get_document(f'{product}-{version}-{bld_num}')
+
+        return CouchbaseBuild(self, data)
+
+    def get_commit(self, *args):
+        """
+        Get the CouchbaseCommit object for a specific commit
+
+        Either a document key itself can be passed, or a project name
+        and SHA which are then combined into a document key; more than
+        two arguments raises an exception
+        """
+
+        if len(args) == 1:  # Document key
+            commit_key = args[0]
+        elif len(args) == 2:  # Project and SHA
+            commit_key = '-'.join(args)
+        else:
+            raise ValueError(f'Only 1 or 2 arguments can be passed: {args}')
+
+        data = self.get_document(commit_key)
+
+        return CouchbaseCommit(self, data)
+
+    def query_documents(self, doctype, where_clause=None, simple=False,
+                        **kwargs):
+        """
+        Acquire all documents of a given type and create a generator
+        to loop through them
+
+        Will return a specific object for each result based on the type
+        if 'simple' is not True, else just returns the document
+
+        Pass everything *after* the WHERE, along with any additional
+        optional named parameters which will be associated with
+        $variables in the query string
+        """
+
+        class_type = f'Couchbase{doctype.capitalize()}'
+        q_string = f"SELECT * FROM {self.bucket_name} where type='{doctype}'"
+
+        if where_clause is not None:
+            q_string += f' AND {where_clause}'
+
+        query = N1QLQuery(q_string, **kwargs)
+
+        for row in self.bucket.n1ql_query(query):
+            if simple:
+                yield row[self.bucket_name]
+            else:
+                yield locals()[class_type](self, row[self.bucket_name])
 
     def get_product_version_index(self):
         """
@@ -162,14 +169,6 @@ class CouchbaseDB:
             return self.bucket.get('product-version-index').value
         except couchbase.exceptions.NotFoundError:
             return dict()
-
-    def iterate_documents(self, doctype):
-        """Iterate through all documents of a given type"""
-
-        query = N1QLQuery(f"SELECT * FROM build_info where type='{doctype}'")
-
-        for row in self.bucket.n1ql_query(query):
-            yield row['build_info']
 
     def upsert_documents(self, data):
         """Do bulk insert/update of a set of documents"""
