@@ -145,7 +145,6 @@ class CouchbaseDB:
         $variables in the query string
         """
 
-        class_type = f'Couchbase{doctype.capitalize()}'
         q_string = f"SELECT * FROM {self.bucket_name} where type='{doctype}'"
 
         if where_clause is not None:
@@ -157,7 +156,7 @@ class CouchbaseDB:
             if simple:
                 yield row[self.bucket_name]
             else:
-                yield locals()[class_type](self, row[self.bucket_name])
+                yield document_types[doctype](self, row[self.bucket_name])
 
     def get_product_version_index(self):
         """
@@ -191,3 +190,9 @@ class CouchbaseDB:
         """Update the product-version index entry"""
 
         self.upsert_documents({'product-version-index': prod_ver_index})
+
+
+document_types = {
+    'build': CouchbaseBuild,
+    'commit': CouchbaseCommit,
+}
