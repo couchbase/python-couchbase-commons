@@ -13,7 +13,7 @@ from collections import namedtuple
 import dulwich.errors
 
 from dulwich.client import get_transport_and_path
-from dulwich.porcelain import clone, remote_add
+from dulwich.porcelain import clone, open_repo_closing
 from dulwich.repo import Repo
 
 
@@ -74,6 +74,31 @@ def checkout_repo(path, url, bare=True):
     return Repo(abspath)
 
 
+def remote_add_or_update(repo, name, url):
+    """
+    Modified version of Dulwich's porcelain.remote_add(); adds a remote
+    if it doesn't yet exist for the given repository, otherwise updates
+    the URL if it's changed
+    """
+
+    if not isinstance(name, bytes):
+        name = name.encode('utf-8')
+
+    if not isinstance(url, bytes):
+        url = url.encode('utf-8')
+
+    with open_repo_closing(repo) as r:
+        c = r.get_config()
+        section = (b'remote', name)
+
+        if c.has_section(section):
+            if c.get(section, b'url') == url:
+                return
+
+        c.set(section, b'url', url)
+        c.write_to_path()
+
+
 class MissingCommitError(Exception):
     """Module-level exception for missing/invalid commits"""
 
@@ -83,19 +108,20 @@ class MissingCommitError(Exception):
 class RepoCacheEntry:
     """Simple class to handle entries for the repository cache"""
 
-    def __init__(self, name, directory, remotes, current_remote):
+    def __init__(self, name, directory, remotes, remote_urls):
         """Basic initialization for cache entry"""
 
         self.name = name
         self.directory = directory
         self.remotes = remotes
-        self.current_remote = current_remote
+        self.urls = set(remote_urls)
 
-    def add_remote(self, remote):
-        """Add a new remote to the entry and set it as the current one"""
+    def upsert_remote(self, remote):
+        """
+        Add remote to the entry if it's new or update it in the entry
+        """
 
-        self.remotes.append(remote)
-        self.current_remote = remote
+        self.remotes[remote.name] = remote
 
 
 class RepoCache:
@@ -116,13 +142,14 @@ class RepoCache:
         """Get the current set of remotes for a given repository"""
 
         conf = repo.get_config()
-        remotes = list()
+        remotes = dict()
 
         for key in conf.keys():
             if key[0] == b'remote':
-                remotes.append(self.RemoteEntry(
-                    key[1].decode(), conf.get(key, b'url').decode()
-                ))
+                remote_name = key[1].decode()
+                remotes[remote_name] = self.RemoteEntry(
+                    remote_name, conf.get(key, b'url').decode()
+                )
 
         return remotes
 
@@ -133,7 +160,7 @@ class RepoCache:
         to be done for the repository.
 
         Specifically, only fetch from the remote when needed:
-          - Repository is checked out, remote is new
+          - Repository is checked out, remote URL is new
           - Repository is checked out, but not already in cache
           - Repository is not checked out (the clone essentially
             does the fetching)
@@ -144,7 +171,7 @@ class RepoCache:
         initial access require a fetch.
 
         Ensure cache is kept up to date with all changes made, and keep
-        track of the current remote (needed to know when to do another
+        track of the remote URLs (needed to know when to do another
         fetch for the repository).
         """
 
@@ -161,8 +188,9 @@ class RepoCache:
 
             if project in self.cache:
                 # Repository in cache, do sanity check for repository
-                # directory and remote, fetching from URL if we have
-                # a new remote (and adding remote to the repository)
+                # directory and remote, fetching from URL if it hasn't
+                # been seen before, and updating remote information as
+                # necessary
                 repo_entry = self.cache[project]
 
                 if repo_dir != repo_entry.directory:
@@ -172,13 +200,28 @@ class RepoCache:
                         f'{repo_dir} != {repo_entry.directory}'
                     )
 
-                remotes = [remote.name for remote in repo_entry.remotes]
+                remotes = [remote_name for remote_name in repo_entry.remotes]
 
+                # If we haven't seen the URL yet, fetch from URL
+                if repo_url not in repo_entry.urls:
+                    logger.debug(f'Fetching from remote {repo_url}...')
+                    fetch(repo, repo_url)
+
+                # Ensure cache information is updated correctly for
+                # given remote and URL (and make sure URL is in current
+                # list of those already seen)
                 if remote not in remotes:
                     logger.debug(f'    Adding remote {remote} for repo '
-                                 f'{project} and fetching remote...')
-                    repo_entry.add_remote(self.RemoteEntry(remote, repo_url))
-                    fetch(repo, repo_url)
+                                 f'{project}...')
+                elif repo_url != repo_entry.remotes[remote].url:
+                    logger.debug(f'    Updating URL to {repo_url} for '
+                                 f'remote {remote} in repo {project}...')
+
+                # Note these are no-ops if the information is already
+                # up to date, and inexpensive enough to run
+                repo_entry.urls.add(repo_url)
+                repo_entry.upsert_remote(self.RemoteEntry(remote, repo_url))
+                remote_add_or_update(repo_dir, remote, repo_url)
             else:
                 # Repository needs to be added to cache, ensure URL
                 # has been given, then create cache entry, update
@@ -188,19 +231,21 @@ class RepoCache:
                                        f'remote URL')
 
                 remotes = self.get_remotes(repo)
-                remote_names = [remote.name for remote in remotes]
+                remote_names = [remote_name for remote_name in remotes]
+                remote_urls = [remote.url for remote in remotes.values()]
+                remote_urls.append(repo_url)   # Duplicating is safe here
 
                 self.cache[project] = RepoCacheEntry(
-                    remote, repo_dir, remotes, remote
+                    remote, repo_dir, remotes, remote_urls
                 )
 
                 if remote not in remote_names:
                     logger.debug(f'    Adding remote {remote} for repo '
                                  f'{project}...')
-                    self.cache[project].add_remote(
+                    self.cache[project].upsert_remote(
                         self.RemoteEntry(remote, repo_url)
                     )
-                    remote_add(repo_dir, remote, repo_url)
+                    remote_add_or_update(repo_dir, remote, repo_url)
 
                 logger.debug(f'    Fetching remotes for {project}...')
                 fetch(repo, repo_url)
@@ -215,9 +260,9 @@ class RepoCache:
                 raise RuntimeError(f'New project "{project}" has no '
                                    f'remote URL')
 
-            remotes = [self.RemoteEntry(remote, repo_url)]
+            remotes = {remote: self.RemoteEntry(remote, repo_url)}
             self.cache[project] = RepoCacheEntry(
-                remote, repo_dir, remotes, remote
+                remote, repo_dir, remotes, [repo_url]
             )
 
             try:
