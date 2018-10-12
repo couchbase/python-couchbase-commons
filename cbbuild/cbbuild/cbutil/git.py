@@ -27,7 +27,8 @@ def broken_fetch(repo, remote_location, errstream=default_bytes_err_stream):
     fetches from all remotes
 
     NOTE: This method is BROKEN in that is does NOT update the remotes
-    in a local checkout (bare or not).
+    in a local checkout (bare or not); recent versions of Dulwich fix
+    this issue
     """
 
     client, path = get_transport_and_path(remote_location)
@@ -40,7 +41,7 @@ def broken_fetch(repo, remote_location, errstream=default_bytes_err_stream):
     return remote_refs
 
 
-def fetch(repo, remote_location):
+def fetch_all(repo):
     """
     Call out to Git command to do a 'fetch --all'
 
@@ -65,7 +66,7 @@ def checkout_repo(path, url, bare=True):
 
     if cfgpath.exists():
         logger.debug(f'Fetching {url} into {path}...')
-        fetch(Repo(abspath), url)
+        fetch_all(Repo(abspath))
     else:
         logger.debug(f'Cloning {url} into {path}...')
         clone(url, target=abspath, bare=bare,
@@ -211,11 +212,6 @@ class RepoCache:
 
                 remotes = [remote_name for remote_name in repo_entry.remotes]
 
-                # If we haven't seen the URL yet, fetch from URL
-                if repo_url not in repo_entry.urls:
-                    logger.debug(f'Fetching from remote {repo_url}...')
-                    fetch(repo, repo_url)
-
                 # Ensure cache information is updated correctly for
                 # given remote and URL (and make sure URL is in current
                 # list of those already seen)
@@ -226,11 +222,19 @@ class RepoCache:
                     logger.debug(f'    Updating URL to {repo_url} for '
                                  f'remote {remote} in repo {project}...')
 
-                # Note these are no-ops if the information is already
-                # up to date, and inexpensive enough to run
+                # This only changes information if anything for the
+                # remote has changed; running it unconditionally is
+                # safe and relatively inexpensive
+                remote_add_or_update(repo_dir, remote, repo_url)
+
+                # If we haven't seen the URL yet, fetch from URL
+                if repo_url not in repo_entry.urls:
+                    logger.debug(f'Fetching from remote {repo_url}...')
+                    fetch_all(repo)
+
+                # Potential no-ops, but running unconditionally is safe
                 repo_entry.urls.add(repo_url)
                 repo_entry.upsert_remote(self.RemoteEntry(remote, repo_url))
-                remote_add_or_update(repo_dir, remote, repo_url)
             else:
                 # Repository needs to be added to cache, ensure URL
                 # has been given, then create cache entry, update
@@ -257,7 +261,7 @@ class RepoCache:
                     remote_add_or_update(repo_dir, remote, repo_url)
 
                 logger.debug(f'    Fetching remotes for {project}...')
-                fetch(repo, repo_url)
+                fetch_all(repo)
         else:
             logger.debug(f'    Repo {project} is new, cloning and adding '
                          f'to the cache...')
