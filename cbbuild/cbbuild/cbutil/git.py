@@ -78,7 +78,7 @@ def remote_add_or_update(repo, name, url):
     """
     Modified version of Dulwich's porcelain.remote_add(); adds a remote
     if it doesn't yet exist for the given repository, otherwise updates
-    the URL if it's changed
+    the URL and/or refspec if it's changed
     """
 
     if not isinstance(name, bytes):
@@ -91,11 +91,20 @@ def remote_add_or_update(repo, name, url):
         c = r.get_config()
         section = (b'remote', name)
 
+        refspec = f'+refs/heads/*:refs/remotes/{name.decode()}/*'
+        refspec = refspec.encode('utf-8')
+
         if c.has_section(section):
             if c.get(section, b'url') == url:
-                return
+                try:
+                    if c.get(section, b'fetch') == refspec:
+                        return
+                except KeyError:
+                    # 'fetch' missing, set it in the following code
+                    pass
 
         c.set(section, b'url', url)
+        c.set(section, b'fetch', refspec)
         c.write_to_path()
 
 
