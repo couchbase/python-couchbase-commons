@@ -92,8 +92,10 @@ class CouchbaseDB:
 
         self.bucket_name = db_info['db_uri'].split('/')[-1]
         self.bucket = couchbase.bucket.Bucket(
-            db_info['db_uri'], username=db_info['username'],
-            password=db_info['password']
+            db_info['db_uri'],
+            username=db_info['username'],
+            password=db_info['password'],
+            lockmode=couchbase.bucket.LOCKMODE_WAIT
         )
 
     def get_document(self, key):
