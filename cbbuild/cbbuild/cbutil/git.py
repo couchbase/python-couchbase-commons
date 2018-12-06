@@ -17,7 +17,7 @@ from dulwich.porcelain import clone, open_repo_closing
 from dulwich.repo import Repo
 
 
-logger = logging.getLogger('cbbuild.git')
+logger = logging.getLogger('cbbuild.cbutil.git')
 default_bytes_err_stream = getattr(sys.stderr, 'buffer', sys.stderr)
 
 
