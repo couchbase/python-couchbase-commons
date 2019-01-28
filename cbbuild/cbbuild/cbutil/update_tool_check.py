@@ -8,6 +8,7 @@ import importlib
 import os
 import os.path
 import pathlib
+import platform
 import time
 
 import requests
@@ -34,13 +35,34 @@ def get_version():
         return None
 
 
+def get_platform():
+    """
+    Really basic check to determine necessary platform for package;
+    the results are currently hard-coded, may need a bit more flexi-
+    bility in the future
+    """
+
+    mach_platform = platform.system()
+
+    if mach_platform == 'Linux':
+        return 'centos6'
+    elif mach_platform == 'Darwin':
+        return 'macos'
+    elif mach_platform == 'Windows':
+        return 'windows_msvc2017'
+    else:
+        raise AttributeError(
+            f'Unable to determine proper platform from "{mach_platform}"'
+        )
+
+
 def check_for_new_version(tool_info, local_cache_dir):
     """
     Check S3 to see if a new version is available, and if so,
     download and run it instead (via os.execv)
     """
 
-    tool_name, tool_version, tool_args, arch = tool_info
+    tool_name, tool_version, tool_args = tool_info
     tool_base_name = tool_name.replace('.exe', '')
 
     local_cache_version = local_cache_dir / 'current_version.txt'
@@ -59,6 +81,7 @@ def check_for_new_version(tool_info, local_cache_dir):
         latest_version = req.content.decode()
 
     if StrictVersion(latest_version) > StrictVersion(tool_version):
+        arch = get_platform()
         binary_url = f'{s3_base_dir}/{tool_version}/{arch}/{tool_name}'
         with requests.get(binary_url) as req:
             req.raise_for_status()
@@ -73,14 +96,13 @@ def check_for_new_version(tool_info, local_cache_dir):
         local_cache_version.touch(exist_ok=True)
 
 
-def check_for_update(tool_info):
+def check_for_update(tool_name, tool_args):
     """
     For a given tool, check for a new version of the tool, both in the
     local cache directory (if it exists) or on S3; if either is true,
     run the new version instead (via os.execv)
     """
 
-    tool_name, tool_version, tool_args, _ = tool_info
     tool_base_name = tool_name.replace('.exe', '')
 
     local_cache_dir = pathlib.Path.home() / '.cbcache' / tool_base_name
@@ -89,7 +111,8 @@ def check_for_update(tool_info):
 
     pathlib.Path.mkdir(local_cache_dir, parents=True)
 
-    curr_version = tool_version
+    curr_version = get_version()
+    tool_info = tool_name, curr_version, tool_args
 
     # Check for a local version file, writing out if it doesn't yet
     # exist with the current running process' version and check for
