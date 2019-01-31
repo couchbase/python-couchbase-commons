@@ -11,9 +11,9 @@ import pathlib
 import platform
 import time
 
-import requests
-
 from distutils.version import StrictVersion
+
+import requests
 
 
 def get_version():

@@ -11,22 +11,6 @@ import version
 # long_description = open('README.txt').read()
 
 
-def discover_packages(base):
-    """
-    Discovers all sub-packages for a base package
-    Note: does not work with namespaced packages (via pkg_resources
-    or similar)
-    """
-
-    mod = importlib.import_module(base)
-    mod_fname = mod.__file__
-    mod_dirname = os.path.normpath(os.path.dirname(mod_fname))
-
-    for root, _dirnames, filenames in os.walk(mod_dirname):
-        for _ in fnmatch.filter(filenames, '__init__.py'):
-            yield '.'.join(os.path.relpath(root).split(os.sep))
-
-
 def reqfile_read(fname):
     with open(fname, 'r') as reqfile:
         reqs = reqfile.read()
@@ -64,14 +48,15 @@ def load_github_dependency_links(fname):
 DEPENDENCY_LINKS = load_github_dependency_links('requirements.txt')
 
 setup_args = dict(
-    name='cbbuild',
+    name='cbbuild-util',
     version=version.__version__,
-    description='Couchbase Build Team support Python packages',
+    description='Couchbase Build Team support Python utilities package',
     # long_description = long_description,
     author='Couchbase Build and Release Team',
     author_email='build-team@couchbase.com',
     license='Apache License, Version 2.0',
-    packages=list(discover_packages('cbbuild')),
+    packages=['cbbuild.util'],
+    zip_safe=False,
     install_requires=REQUIREMENTS['install'],
     dependency_links=DEPENDENCY_LINKS,
     classifiers=[
