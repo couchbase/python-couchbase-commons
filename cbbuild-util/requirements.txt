@@ -1,2 +1,3 @@
+dulwich == 0.19.9
 lxml >= 3.8.0
 requests >= 2.20.0
