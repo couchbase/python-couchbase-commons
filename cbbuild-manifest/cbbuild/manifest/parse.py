@@ -80,6 +80,20 @@ class Manifest:
 
         return dict(zip(attrs, values))
 
+    @staticmethod
+    def create_linkfile_dict(child):
+        """Generate dictionary from a linkfile element"""
+
+        attrs = ['src', 'dest']
+        values = [child.get(attr) for attr in attrs]
+
+        if None in values:
+            raise InvalidManifest(
+                'Missing required attribute in linkfile element'
+            )
+
+        return dict(zip(attrs, values))
+
     def find_remotes(self):
         """
         Determine the Git remotes used by the projects defined within
