@@ -204,8 +204,9 @@ class Manifest:
 
             if project_name in projects:
                 paths = [
-                    p_attr['path'] for name, p_attrs in projects.items()
-                    for p_attr in p_attrs if name == project_name
+                    p_attr.get('path', project_name)
+                        for name, p_attrs in projects.items()
+                        for p_attr in p_attrs if name == project_name
                 ]
 
                 if project_dict['path'] in paths:
