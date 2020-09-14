@@ -49,7 +49,7 @@ def fetch_all(repo):
     actually does what is intended
     """
 
-    subprocess.run(['git', 'fetch', '--all'], cwd=repo.path,
+    subprocess.run(['git', 'fetch', '--all', '--tags'], cwd=repo.path,
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
