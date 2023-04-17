@@ -132,14 +132,13 @@ class ManifestInfo:
         are not available
         """
 
-        build_project = self.projects['build'][0]
-
-        if build_project.annotation:
-            annotations = {
-                anno.name: anno.value for anno in build_project.annotation
-            }
-        else:
-            annotations = dict()
+        # QQQ: This is redundant with Manifest.parse_data() in parse.py
+        annotations = dict()
+        for build_project in self.projects.get('build', []):
+            if build_project.annotation is not None:
+                annotations.update({
+                    anno.name: anno.value for anno in build_project.annotation
+                })
 
         return (annotations.get('PRODUCT', 'unknown'),
                 annotations.get('RELEASE', 'unknown'),

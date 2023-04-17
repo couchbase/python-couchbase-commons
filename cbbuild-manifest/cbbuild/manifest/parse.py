@@ -250,8 +250,8 @@ class Manifest:
 
         annotations = dict()
 
-        if 'build' in self.projects:
-            for annotation in self.projects['build'][0].get('annotation', []):
+        for build_project in self.projects.get('build', []):
+            for annotation in build_project.get('annotation', []):
                 annotations[annotation['name']] = annotation['value']
 
         product = annotations.get('PRODUCT', 'unknown')
