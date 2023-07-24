@@ -4,6 +4,7 @@ for use with the build database
 """
 
 import logging
+import os
 import pathlib
 import subprocess
 import sys
@@ -279,9 +280,10 @@ class RepoCache:
             )
 
             try:
+                os.makedirs(repo_dir, exist_ok=True)
                 repo = clone(repo_url, target=repo_dir, bare=True,
                              errstream=default_bytes_err_stream,
-                             origin=remote.encode('utf-8'))
+                             origin=remote)
             except dulwich.errors.HangupException:
                 raise RuntimeError(
                     f'Unable to clone bare repo "{repo_url}" into directory '
