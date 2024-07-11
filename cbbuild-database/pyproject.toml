@@ -1,12 +1,12 @@
 [project]
 name = "cbbuild-database"
-version = "0.7.0"
+version = "0.8.0"
 description = "Couchbase Build Team build database package"
 authors = [
     { name = "Couchbase Build Team", email = "build-team@couchbase.com" }
 ]
 dependencies = [
-    "couchbase>=3",
+    "couchbase>=4",
 ]
 readme = "README.md"
 requires-python = ">=3.10, <4"

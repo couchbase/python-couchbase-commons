@@ -6,8 +6,9 @@ the Python API
 import couchbase.bucket
 import couchbase.exceptions
 
-from couchbase.n1ql import N1QLQuery
-
+from couchbase.auth import PasswordAuthenticator
+from couchbase.cluster import Cluster
+from couchbase.options import ClusterOptions, ClusterTimeoutOptions, QueryOptions
 
 class NotFoundError(Exception):
     """Module-level exception for missing keys in database"""
@@ -90,19 +91,16 @@ class CouchbaseDB:
     def __init__(self, db_info):
         """Set up connection to desired Couchbase Server bucket"""
 
-        self.bucket_name = db_info['db_uri'].split('/')[-1]
-        self.bucket = couchbase.bucket.Bucket(
-            db_info['db_uri'],
-            username=db_info['username'],
-            password=db_info['password'],
-            lockmode=couchbase.bucket.LOCKMODE_WAIT
-        )
+        auth = PasswordAuthenticator(db_info['username'], db_info['password'])
+        self.cluster = Cluster(db_info['db_uri'], ClusterOptions(auth))
+        self.bucket_name = db_info['bucket']
+        self.coll = self.cluster.bucket(self.bucket_name).default_collection()
 
     def get_document(self, key):
         """Retrieve the document with the given key"""
 
         try:
-            return self.bucket.get(key).value
+            return self.coll.get(key).value
         except couchbase.exceptions.NotFoundError:
             raise NotFoundError(f'Unable to find key "{key}" in database')
 
@@ -147,14 +145,12 @@ class CouchbaseDB:
         $variables in the query string
         """
 
-        q_string = f"SELECT * FROM {self.bucket_name} where type='{doctype}'"
+        query = f"SELECT * FROM {self.bucket_name} where type='{doctype}'"
 
         if where_clause is not None:
-            q_string += f' AND {where_clause}'
+            query += f' AND {where_clause}'
 
-        query = N1QLQuery(q_string, **kwargs)
-
-        for row in self.bucket.n1ql_query(query):
+        for row in self.cluster.query(query, **kwargs):
             if simple:
                 yield row[self.bucket_name]
             else:
@@ -167,7 +163,7 @@ class CouchbaseDB:
         """
 
         try:
-            return self.bucket.get('product-version-index').value
+            return self.coll.get('product-version-index').value
         except couchbase.exceptions.NotFoundError:
             return dict()
 
@@ -175,7 +171,7 @@ class CouchbaseDB:
         """Do bulk insert/update of a set of documents"""
 
         try:
-            self.bucket.upsert_multi(data)
+            self.coll.upsert_multi(data)
         except couchbase.exceptions.CouchbaseError as exc:
             print(f'Unable to insert/update data: {exc.message}')
 
@@ -183,7 +179,7 @@ class CouchbaseDB:
         """Simple test for checking if a given key is in the database"""
 
         try:
-            self.bucket.get(key)
+            self.coll.get(key)
             return True
         except couchbase.exceptions.NotFoundError:
             return False
