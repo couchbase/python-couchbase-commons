@@ -101,7 +101,7 @@ class CouchbaseDB:
 
         try:
             return self.coll.get(key).value
-        except couchbase.exceptions.NotFoundError:
+        except couchbase.exceptions.DocumentNotFoundException:
             raise NotFoundError(f'Unable to find key "{key}" in database')
 
     def get_build(self, product, version, bld_num):
@@ -164,7 +164,7 @@ class CouchbaseDB:
 
         try:
             return self.coll.get('product-version-index').value
-        except couchbase.exceptions.NotFoundError:
+        except couchbase.exceptions.DocumentNotFoundException:
             return dict()
 
     def upsert_documents(self, data):
@@ -181,7 +181,7 @@ class CouchbaseDB:
         try:
             self.coll.get(key)
             return True
-        except couchbase.exceptions.NotFoundError:
+        except couchbase.exceptions.DocumentNotFoundException:
             return False
 
     def update_product_version_index(self, prod_ver_index):
