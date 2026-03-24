@@ -3,7 +3,6 @@ Collection of classes and methods to work with Couchbase Server via
 the Python API
 """
 
-import couchbase.bucket
 import couchbase.exceptions
 
 from couchbase.auth import PasswordAuthenticator
@@ -100,7 +99,7 @@ class CouchbaseDB:
         """Retrieve the document with the given key"""
 
         try:
-            return self.coll.get(key).value
+            return self.coll.get(key).content_as[dict]
         except couchbase.exceptions.DocumentNotFoundException:
             raise NotFoundError(f'Unable to find key "{key}" in database')
 
@@ -163,7 +162,7 @@ class CouchbaseDB:
         """
 
         try:
-            return self.coll.get('product-version-index').value
+            return self.coll.get('product-version-index').content_as[dict]
         except couchbase.exceptions.DocumentNotFoundException:
             return dict()
 
@@ -172,8 +171,8 @@ class CouchbaseDB:
 
         try:
             self.coll.upsert_multi(data)
-        except couchbase.exceptions.CouchbaseError as exc:
-            print(f'Unable to insert/update data: {exc.message}')
+        except couchbase.exceptions.CouchbaseException as exc:
+            print(f'Unable to insert/update data: {exc}')
 
     def key_in_db(self, key):
         """Simple test for checking if a given key is in the database"""
